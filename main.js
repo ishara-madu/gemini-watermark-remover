@@ -1,13 +1,23 @@
-// ── Monetag Direct Link Configuration ──
-// Replace with your actual Monetag Direct Link URL
+// ── Direct Link Configuration (Monetag & Adsterra) ──
 const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
+const ADSTERRA_DIRECT_LINK = 'https://www.effectivecpmnetwork.com/randkwisz?key=caedf3de80e737377ebcb57548091bb4';
 
 function handleDownloadAd() {
+  // 1. Open Monetag Direct Link
   if (MONETAG_DIRECT_LINK) {
     try {
       window.open(MONETAG_DIRECT_LINK, '_blank');
     } catch (e) {
       console.error('Failed to open Monetag direct link:', e);
+    }
+  }
+
+  // 2. Open Adsterra Direct Link (Double Pop)
+  if (ADSTERRA_DIRECT_LINK) {
+    try {
+      window.open(ADSTERRA_DIRECT_LINK, '_blank');
+    } catch (e) {
+      console.error('Failed to open Adsterra direct link:', e);
     }
   }
 }
