@@ -1,5 +1,6 @@
 // ── Direct Link Configuration (Monetag) ──
 const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
+const MONETAG_EXPORT_DIRECT_LINK = 'https://omg10.com/4/11584190';
 
 function handleDownloadAd() {
   // Open Monetag Direct Link
@@ -12,6 +13,18 @@ function handleDownloadAd() {
   }
 }
 window.handleDownloadAd = handleDownloadAd;
+
+function handleExportAd() {
+  // Open Monetag Export Direct Link
+  if (MONETAG_EXPORT_DIRECT_LINK) {
+    try {
+      window.open(MONETAG_EXPORT_DIRECT_LINK, '_blank');
+    } catch (e) {
+      console.error('Failed to open Monetag export direct link:', e);
+    }
+  }
+}
+window.handleExportAd = handleExportAd;
 
 // ── 1. Engine Core (alphaMap, blendModes, geometry, tuner) ──
 function calculateAlphaMap(bgCaptureImageData) {
@@ -1297,6 +1310,8 @@ function initImageRemover() {
   btnExport?.addEventListener('click', async () => {
     if (!currentFile || !watermarkEngine || !currentPreviewFrame) return;
 
+    handleExportAd();
+
     tunerContainer.classList.add('hidden');
     resultsArea.classList.add('hidden');
 
@@ -1745,6 +1760,8 @@ function initVideoRemover() {
 
   btnExport?.addEventListener('click', async () => {
     if (!currentFile || !videoEngine) return;
+
+    handleExportAd();
 
     tunerContainer.classList.add('hidden');
     statusContainer.classList.remove('hidden');
