@@ -1,6 +1,6 @@
 // ── Direct Link Configuration (Monetag) ──
 const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
-const MONETAG_EXPORT_DIRECT_LINK = 'https://www.effectivecpmnetwork.com/randkwisz?key=caedf3de80e737377ebcb57548091bb4';
+const MONETAG_EXPORT_DIRECT_LINK = 'https://omg10.com/4/11584190';
 
 function handleDownloadAd() {
   // Open Monetag Direct Link
