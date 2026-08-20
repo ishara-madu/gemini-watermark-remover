@@ -1337,13 +1337,13 @@ function initImageRemover() {
             <div>
               <p class="text-xs mb-2">Original (${width}x${height}px)</p>
               <div class="checker p-2 text-center">
-                <img src="${originalUrl}" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%;" />
+                <img src="${originalUrl}" alt="Original image with watermark (${width}x${height}px)" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%;" />
               </div>
             </div>
             <div>
               <p class="text-xs mb-2 text-green-600">Cleaned Result</p>
               <div class="checker p-2 text-center">
-                <img src="${url}" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%;" />
+                <img src="${url}" alt="Cleaned result image without watermark" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%;" />
               </div>
             </div>
           </div>
