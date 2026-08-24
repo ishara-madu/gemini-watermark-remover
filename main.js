@@ -93,6 +93,30 @@ window.handleShareClick = handleShareClick;
 let activeCleanFileBlob = null;
 let activeCleanFileName = '';
 
+function showSaveToast(message, isTelegram = false) {
+  let toast = document.getElementById('app-save-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'app-save-toast';
+    toast.className = 'save-toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `
+    <div class="toast-content">
+      <iconify-icon icon="ph:check-circle-fill" width="22" style="color: #22c55e; flex-shrink: 0;"></iconify-icon>
+      <div class="toast-text">
+        <p class="toast-title">${message}</p>
+        ${isTelegram ? '<p class="toast-sub">💡 Long-press (තත්පර 2ක් ඔබාගෙන සිටින්න) image above to Save to Photos</p>' : ''}
+      </div>
+    </div>
+  `;
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 4500);
+}
+window.showSaveToast = showSaveToast;
+
 async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
   tgHaptic.impact('medium');
 
@@ -103,7 +127,7 @@ async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
   if (!fileName && activeCleanFileName) {
     fileName = activeCleanFileName;
   }
-  fileName = fileName || 'cleaned_file';
+  fileName = fileName || (mimeType.startsWith('video') ? 'cleaned_video.mp4' : 'cleaned_image.png');
 
   // If blobOrUrl is a string (e.g. object URL) and not a Blob, attempt to fetch it
   if (typeof blob === 'string') {
@@ -115,11 +139,11 @@ async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
     }
   }
 
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || !!window.Telegram?.WebApp?.initData;
+  const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
 
   // Method 1: Web Share API (Primary for Mobile & Telegram Mini App on iOS/Android)
-  // This opens the native OS Share / Save sheet with direct "Save Image / Video to Gallery / Files"
-  if (isMobile && blob instanceof Blob && navigator.canShare && typeof File !== 'undefined') {
+  // Opens native OS sheet to directly "Save to Photos / Gallery / Files"
+  if (blob instanceof Blob && typeof File !== 'undefined' && navigator.canShare) {
     try {
       const file = new File([blob], fileName, { type: blob.type || mimeType });
       if (navigator.canShare({ files: [file] })) {
@@ -128,10 +152,7 @@ async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
           title: fileName
         });
         tgHaptic.notification('success');
-        // Delayed monetag ad trigger after share sheet completes
-        if (MONETAG_DIRECT_LINK) {
-          setTimeout(() => { openExternalLink(MONETAG_DIRECT_LINK); }, 1500);
-        }
+        showSaveToast('Saved / Shared successfully!', isTelegram);
         return;
       }
     } catch (err) {
@@ -154,12 +175,13 @@ async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
     }, 500);
 
     tgHaptic.notification('success');
+    showSaveToast('Download initiated!', isTelegram);
 
-    // Trigger Monetag ad delayed so download is never interrupted
-    if (MONETAG_DIRECT_LINK) {
+    // Only open Monetag ad on regular standalone browsers (never inside Telegram)
+    if (!isTelegram && MONETAG_DIRECT_LINK) {
       setTimeout(() => {
         openExternalLink(MONETAG_DIRECT_LINK);
-      }, 1500);
+      }, 2000);
     }
     return;
   } catch (err) {
@@ -1515,9 +1537,12 @@ function initImageRemover() {
               </div>
             </div>
             <div>
-              <p class="text-xs mb-2 text-green-600">Cleaned Result</p>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs text-green-600 font-bold">Cleaned Result</p>
+                <span class="text-xs text-muted" style="font-size: 0.72rem;">(Long-press to save)</span>
+              </div>
               <div class="checker p-2 text-center">
-                <img src="${url}" alt="Cleaned result image without watermark" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%;" />
+                <img src="${url}" alt="Cleaned result image without watermark" class="saveable-image" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%; -webkit-touch-callout: default; user-select: auto;" />
               </div>
             </div>
           </div>
@@ -1981,8 +2006,13 @@ function initVideoRemover() {
               <video src="${res.originalUrl}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
             <div>
-              <p class="text-xs mb-2 text-green-600">Cleaned Video</p>
-              <video src="${res.url}" controls playsinline style="width:100%; max-height:280px;"></video>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs text-green-600 font-bold">Cleaned Video</p>
+                <span class="text-xs text-muted" style="font-size: 0.72rem;">(Long-press to save)</span>
+              </div>
+              <div class="checker p-2 text-center">
+                <video src="${res.url}" controls playsinline class="saveable-image" style="width:100%; max-height:280px;"></video>
+              </div>
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
