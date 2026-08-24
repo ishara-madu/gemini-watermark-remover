@@ -90,8 +90,10 @@ function handleShareClick(e, url) {
 window.handleShareClick = handleShareClick;
 
 // ── Universal File Saver for Mobile, Telegram Mini App & Desktop ──
+let activeCleanFile = null;
 let activeCleanFileBlob = null;
 let activeCleanFileName = '';
+let activeCleanDataUrl = '';
 
 function showSaveToast(message, isTelegram = false) {
   let toast = document.getElementById('app-save-toast');
@@ -117,81 +119,62 @@ function showSaveToast(message, isTelegram = false) {
 }
 window.showSaveToast = showSaveToast;
 
-async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
-  tgHaptic.impact('medium');
-
-  let blob = blobOrUrl;
-  if (!blob && activeCleanFileBlob) {
-    blob = activeCleanFileBlob;
-  }
-  if (!fileName && activeCleanFileName) {
-    fileName = activeCleanFileName;
-  }
-  fileName = fileName || (mimeType.startsWith('video') ? 'cleaned_video.mp4' : 'cleaned_image.png');
-
-  // If blobOrUrl is a string (e.g. object URL) and not a Blob, attempt to fetch it
-  if (typeof blob === 'string') {
-    try {
-      const resp = await fetch(blob);
-      blob = await resp.blob();
-    } catch (e) {
-      console.warn('Could not fetch blob from url, using fallback:', e);
-    }
-  }
-
-  const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
-
-  // Method 1: Web Share API (Primary for Mobile & Telegram Mini App on iOS/Android)
-  // Opens native OS sheet to directly "Save to Photos / Gallery / Files"
-  if (blob instanceof Blob && typeof File !== 'undefined' && navigator.canShare) {
-    try {
-      const file = new File([blob], fileName, { type: blob.type || mimeType });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: fileName
-        });
-        tgHaptic.notification('success');
-        showSaveToast('Saved / Shared successfully!', isTelegram);
-        return;
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') return; // User simply closed share sheet
-      console.warn('Web Share API error, using anchor fallback:', err);
-    }
-  }
-
-  // Method 2: Programmatic Anchor Download (Standard for Desktop / Chrome / Edge)
+function triggerAnchorDownload(fileDataOrUrl, fileName, isTelegram) {
+  if (!fileDataOrUrl) return;
   try {
-    const fileUrl = (blob instanceof Blob) ? URL.createObjectURL(blob) : blobOrUrl;
+    const url = (fileDataOrUrl instanceof Blob) ? URL.createObjectURL(fileDataOrUrl) : fileDataOrUrl;
     const a = document.createElement('a');
     a.style.display = 'none';
-    a.href = fileUrl;
+    a.href = url;
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
-      document.body.removeChild(a);
+      try { document.body.removeChild(a); } catch (e) {}
     }, 500);
 
     tgHaptic.notification('success');
     showSaveToast('Download initiated!', isTelegram);
 
-    // Only open Monetag ad on regular standalone browsers (never inside Telegram)
+    // Only open Monetag ad on standalone browsers (never inside Telegram)
     if (!isTelegram && MONETAG_DIRECT_LINK) {
       setTimeout(() => {
         openExternalLink(MONETAG_DIRECT_LINK);
       }, 2000);
     }
+  } catch (e) {
+    console.error('Anchor download failed:', e);
+  }
+}
+
+function saveCleanedFile(customFile, fileName, mimeType = 'image/png') {
+  tgHaptic.impact('medium');
+
+  const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
+  const isMobile = isTelegram || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const targetFile = customFile || activeCleanFile;
+  const targetFileName = fileName || activeCleanFileName || (mimeType.startsWith('video') ? 'cleaned_video.mp4' : 'cleaned_image.png');
+  const targetUrl = activeCleanDataUrl || (activeCleanFileBlob ? URL.createObjectURL(activeCleanFileBlob) : null);
+
+  // Method 1: Web Share API (Direct synchronous call within user click to preserve User Activation)
+  if (isMobile && targetFile && navigator.canShare && navigator.canShare({ files: [targetFile] })) {
+    navigator.share({
+      files: [targetFile],
+      title: targetFileName
+    }).then(() => {
+      tgHaptic.notification('success');
+      showSaveToast('Saved / Shared successfully!', isTelegram);
+    }).catch((err) => {
+      if (err.name !== 'AbortError') {
+        triggerAnchorDownload(targetUrl || activeCleanFileBlob, targetFileName, isTelegram);
+      }
+    });
     return;
-  } catch (err) {
-    console.error('Anchor download failed:', err);
   }
 
-  // Method 3: Direct URL Open Fallback
-  if (typeof blobOrUrl === 'string') {
-    openExternalLink(blobOrUrl);
-  }
+  // Method 2: Anchor Download
+  triggerAnchorDownload(targetUrl || activeCleanFileBlob, targetFileName, isTelegram);
 }
 window.saveCleanedFile = saveCleanedFile;
 
@@ -1520,10 +1503,13 @@ function initImageRemover() {
 
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const originalUrl = URL.createObjectURL(currentFile);
-      const url = URL.createObjectURL(blob);
+      const dataUrl = canvas.toDataURL('image/png');
+      const cleanFile = new File([blob], `clean_${currentFile.name}`, { type: 'image/png' });
 
+      activeCleanFile = cleanFile;
       activeCleanFileBlob = blob;
       activeCleanFileName = `clean_${currentFile.name}`;
+      activeCleanDataUrl = dataUrl;
 
       resultsArea.classList.remove('hidden');
       resultsArea.innerHTML = `
@@ -1542,7 +1528,7 @@ function initImageRemover() {
                 <span class="text-xs text-muted" style="font-size: 0.72rem;">(Long-press to save)</span>
               </div>
               <div class="checker p-2 text-center">
-                <img src="${url}" alt="Cleaned result image without watermark" class="saveable-image" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%; -webkit-touch-callout: default; user-select: auto;" />
+                <img src="${dataUrl}" alt="Cleaned result image without watermark" class="saveable-image" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%; -webkit-touch-callout: default; user-select: auto;" />
               </div>
             </div>
           </div>
@@ -1991,8 +1977,11 @@ function initVideoRemover() {
         }
       });
 
+      const cleanFile = new File([res.blob], `clean_${currentFile.name}`, { type: res.mime || 'video/mp4' });
+      activeCleanFile = cleanFile;
       activeCleanFileBlob = res.blob;
       activeCleanFileName = `clean_${currentFile.name}`;
+      activeCleanDataUrl = res.url;
 
       statusContainer.classList.add('hidden');
       resultsArea.classList.remove('hidden');
