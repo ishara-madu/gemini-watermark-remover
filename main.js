@@ -89,6 +89,90 @@ function handleShareClick(e, url) {
 }
 window.handleShareClick = handleShareClick;
 
+// ── Universal File Saver for Mobile, Telegram Mini App & Desktop ──
+let activeCleanFileBlob = null;
+let activeCleanFileName = '';
+
+async function saveCleanedFile(blobOrUrl, fileName, mimeType = 'image/png') {
+  tgHaptic.impact('medium');
+
+  let blob = blobOrUrl;
+  if (!blob && activeCleanFileBlob) {
+    blob = activeCleanFileBlob;
+  }
+  if (!fileName && activeCleanFileName) {
+    fileName = activeCleanFileName;
+  }
+  fileName = fileName || 'cleaned_file';
+
+  // If blobOrUrl is a string (e.g. object URL) and not a Blob, attempt to fetch it
+  if (typeof blob === 'string') {
+    try {
+      const resp = await fetch(blob);
+      blob = await resp.blob();
+    } catch (e) {
+      console.warn('Could not fetch blob from url, using fallback:', e);
+    }
+  }
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || !!window.Telegram?.WebApp?.initData;
+
+  // Method 1: Web Share API (Primary for Mobile & Telegram Mini App on iOS/Android)
+  // This opens the native OS Share / Save sheet with direct "Save Image / Video to Gallery / Files"
+  if (isMobile && blob instanceof Blob && navigator.canShare && typeof File !== 'undefined') {
+    try {
+      const file = new File([blob], fileName, { type: blob.type || mimeType });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: fileName
+        });
+        tgHaptic.notification('success');
+        // Delayed monetag ad trigger after share sheet completes
+        if (MONETAG_DIRECT_LINK) {
+          setTimeout(() => { openExternalLink(MONETAG_DIRECT_LINK); }, 1500);
+        }
+        return;
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return; // User simply closed share sheet
+      console.warn('Web Share API error, using anchor fallback:', err);
+    }
+  }
+
+  // Method 2: Programmatic Anchor Download (Standard for Desktop / Chrome / Edge)
+  try {
+    const fileUrl = (blob instanceof Blob) ? URL.createObjectURL(blob) : blobOrUrl;
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = fileUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+    }, 500);
+
+    tgHaptic.notification('success');
+
+    // Trigger Monetag ad delayed so download is never interrupted
+    if (MONETAG_DIRECT_LINK) {
+      setTimeout(() => {
+        openExternalLink(MONETAG_DIRECT_LINK);
+      }, 1500);
+    }
+    return;
+  } catch (err) {
+    console.error('Anchor download failed:', err);
+  }
+
+  // Method 3: Direct URL Open Fallback
+  if (typeof blobOrUrl === 'string') {
+    openExternalLink(blobOrUrl);
+  }
+}
+window.saveCleanedFile = saveCleanedFile;
+
 function handleDownloadAd() {
   tgHaptic.impact('medium');
   if (MONETAG_DIRECT_LINK) {
@@ -1416,6 +1500,9 @@ function initImageRemover() {
       const originalUrl = URL.createObjectURL(currentFile);
       const url = URL.createObjectURL(blob);
 
+      activeCleanFileBlob = blob;
+      activeCleanFileName = `clean_${currentFile.name}`;
+
       resultsArea.classList.remove('hidden');
       resultsArea.innerHTML = `
         <div class="card">
@@ -1435,10 +1522,10 @@ function initImageRemover() {
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
-            <a href="${url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
+            <button type="button" class="btn btn-primary" onclick="saveCleanedFile(null, 'clean_${currentFile.name}', 'image/png')">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
-              Download Cleaned PNG
-            </a>
+              Save Cleaned PNG
+            </button>
             <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
               <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
               Share on Telegram
@@ -1879,6 +1966,9 @@ function initVideoRemover() {
         }
       });
 
+      activeCleanFileBlob = res.blob;
+      activeCleanFileName = `clean_${currentFile.name}`;
+
       statusContainer.classList.add('hidden');
       resultsArea.classList.remove('hidden');
 
@@ -1896,10 +1986,10 @@ function initVideoRemover() {
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
-            <a href="${res.url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
+            <button type="button" class="btn btn-primary" onclick="saveCleanedFile(null, 'clean_${currentFile.name}', 'video/mp4')">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
-              Download Cleaned Video MP4
-            </a>
+              Save Cleaned Video MP4
+            </button>
             <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
               <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
               Share on Telegram
