@@ -2269,3 +2269,26 @@ body {
     gap: 1rem;
   }
 }
+
+/* ── Telegram Mini App (TMA) Native Optimizations ── */
+html.is-telegram-webapp,
+body.is-telegram-webapp {
+  min-height: 100vh;
+  min-height: var(--tg-viewport-stable-height, 100vh);
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.is-telegram-webapp .app-header {
+  padding-top: max(0.4rem, env(safe-area-inset-top, 0px));
+}
+
+.is-telegram-webapp .footer-container {
+  padding-bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem));
+}
+
+.is-telegram-webapp .btn,
+.is-telegram-webapp .tab-btn,
+.is-telegram-webapp .slider {
+  touch-action: manipulation;
+}

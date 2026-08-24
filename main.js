@@ -2,26 +2,105 @@
 const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
 const MONETAG_EXPORT_DIRECT_LINK = 'https://omg10.com/4/11584190';
 
-function handleDownloadAd() {
-  // Open Monetag Direct Link
-  if (MONETAG_DIRECT_LINK) {
+// ── Telegram Mini App (TMA) Integration & Haptics ──
+const tgApp = typeof window !== 'undefined' && window.Telegram ? window.Telegram.WebApp : null;
+
+const tgHaptic = {
+  impact: (style = 'medium') => {
     try {
-      window.open(MONETAG_DIRECT_LINK, '_blank');
-    } catch (e) {
-      console.error('Failed to open Monetag direct link:', e);
+      if (tgApp?.HapticFeedback?.impactOccurred) {
+        tgApp.HapticFeedback.impactOccurred(style);
+      }
+    } catch (e) {}
+  },
+  notification: (type = 'success') => {
+    try {
+      if (tgApp?.HapticFeedback?.notificationOccurred) {
+        tgApp.HapticFeedback.notificationOccurred(type);
+      }
+    } catch (e) {}
+  },
+  selection: () => {
+    try {
+      if (tgApp?.HapticFeedback?.selectionChanged) {
+        tgApp.HapticFeedback.selectionChanged();
+      }
+    } catch (e) {}
+  }
+};
+window.tgHaptic = tgHaptic;
+
+function initTelegramWebApp() {
+  if (!tgApp) return;
+
+  try {
+    tgApp.ready();
+    tgApp.expand();
+
+    // Prevent accidental swipe-to-close gestures while touching sliders/canvas
+    if (typeof tgApp.disableVerticalSwipes === 'function') {
+      tgApp.disableVerticalSwipes();
     }
+
+    // Set theme and header colors
+    if (typeof tgApp.setHeaderColor === 'function') {
+      tgApp.setHeaderColor('#F5F5F7');
+    }
+    if (typeof tgApp.setBackgroundColor === 'function') {
+      tgApp.setBackgroundColor('#F5F5F7');
+    }
+
+    document.documentElement.classList.add('is-telegram-webapp');
+    if (document.body) {
+      document.body.classList.add('is-telegram-webapp');
+    }
+  } catch (e) {
+    console.warn('Telegram WebApp setup notice:', e);
+  }
+}
+
+// Early call for Telegram
+initTelegramWebApp();
+
+function openExternalLink(url) {
+  if (!url) return;
+  try {
+    if (tgApp && typeof tgApp.openLink === 'function') {
+      tgApp.openLink(url);
+      return;
+    }
+  } catch (e) {
+    console.error('Failed to open link via Telegram WebApp:', e);
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+window.openExternalLink = openExternalLink;
+
+function handleShareClick(e, url) {
+  if (e) e.preventDefault();
+  tgHaptic.impact('light');
+  if (tgApp && typeof tgApp.openTelegramLink === 'function') {
+    try {
+      tgApp.openTelegramLink(url);
+      return;
+    } catch (err) {}
+  }
+  openExternalLink(url);
+}
+window.handleShareClick = handleShareClick;
+
+function handleDownloadAd() {
+  tgHaptic.impact('medium');
+  if (MONETAG_DIRECT_LINK) {
+    openExternalLink(MONETAG_DIRECT_LINK);
   }
 }
 window.handleDownloadAd = handleDownloadAd;
 
 function handleExportAd() {
-  // Open Monetag Export Direct Link
+  tgHaptic.impact('medium');
   if (MONETAG_EXPORT_DIRECT_LINK) {
-    try {
-      window.open(MONETAG_EXPORT_DIRECT_LINK, '_blank');
-    } catch (e) {
-      console.error('Failed to open Monetag export direct link:', e);
-    }
+    openExternalLink(MONETAG_EXPORT_DIRECT_LINK);
   }
 }
 window.handleExportAd = handleExportAd;
@@ -964,6 +1043,7 @@ function smoothScrollTo(element, offset = 75) {
 }
 
 function init() {
+  initTelegramWebApp();
   initTabs();
   initImageRemover();
   initVideoRemover();
@@ -984,6 +1064,7 @@ function initTabs() {
   if (!tabImage || !tabVideo || !panelImage || !panelVideo) return;
 
   function switchTab(target) {
+    tgHaptic.selection();
     if (target === 'image') {
       currentTab = 'image';
       try { sessionStorage.setItem('activeTab', 'image'); } catch (e) { }
@@ -1146,6 +1227,7 @@ function initImageRemover() {
     if (!element) return;
     element.addEventListener('input', (e) => {
       currentSettings[prop] = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+      tgHaptic.selection();
       updateSliderLabels();
       renderTuner();
     });
@@ -1157,6 +1239,7 @@ function initImageRemover() {
   bindSlider(sliderOffsetY, 'offsetY', false);
 
   btnResetSliders?.addEventListener('click', () => {
+    tgHaptic.impact('light');
     applyAutoSettings();
   });
 
@@ -1278,6 +1361,7 @@ function initImageRemover() {
     if (!file.type.startsWith('image/')) return;
     if (isProcessing) return;
 
+    tgHaptic.impact('medium');
     setDropzoneLoading(true, 'Processing & Detecting Watermark...');
     currentFile = file;
 
@@ -1299,9 +1383,11 @@ function initImageRemover() {
 
       tunerContainer.classList.remove('hidden');
       applyAutoSettings();
+      tgHaptic.notification('success');
       smoothScrollTo(tunerContainer);
     } catch (err) {
       console.error(err);
+      tgHaptic.notification('error');
     } finally {
       setDropzoneLoading(false);
     }
@@ -1310,6 +1396,7 @@ function initImageRemover() {
   btnExport?.addEventListener('click', async () => {
     if (!currentFile || !watermarkEngine || !currentPreviewFrame) return;
 
+    tgHaptic.impact('medium');
     handleExportAd();
 
     tunerContainer.classList.add('hidden');
@@ -1347,18 +1434,24 @@ function initImageRemover() {
               </div>
             </div>
           </div>
-          <div class="mt-4 text-center">
+          <div class="mt-4 flex flex-wrap justify-center gap-3">
             <a href="${url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
               Download Cleaned PNG
+            </a>
+            <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
+              <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
+              Share on Telegram
             </a>
           </div>
           ${getPromoCardHtml('image')}
         </div>
       `;
+      tgHaptic.notification('success');
       smoothScrollTo(resultsArea);
     } catch (err) {
       console.error(err);
+      tgHaptic.notification('error');
       alert('Error exporting image: ' + err.message);
     }
   });
@@ -1488,6 +1581,7 @@ function initVideoRemover() {
     if (!element) return;
     element.addEventListener('input', (e) => {
       currentSettings[prop] = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+      tgHaptic.selection();
       updateSliderLabels();
       renderTuner();
     });
@@ -1499,6 +1593,7 @@ function initVideoRemover() {
   bindSlider(sliderOffsetY, 'offsetY', false);
 
   btnResetSliders?.addEventListener('click', () => {
+    tgHaptic.impact('light');
     applyAutoSettings();
   });
 
@@ -1727,6 +1822,7 @@ function initVideoRemover() {
     if (!file.type.startsWith('video/')) return;
     if (isProcessing) return;
 
+    tgHaptic.impact('medium');
     setDropzoneLoading(true, 'Extracting Best Frame & Analyzing...');
     currentFile = file;
 
@@ -1749,9 +1845,11 @@ function initVideoRemover() {
 
       tunerContainer.classList.remove('hidden');
       applyAutoSettings();
+      tgHaptic.notification('success');
       smoothScrollTo(tunerContainer);
     } catch (err) {
       console.error(err);
+      tgHaptic.notification('error');
       alert('Could not generate preview frame for video: ' + (err.message || err));
     } finally {
       setDropzoneLoading(false);
@@ -1761,6 +1859,7 @@ function initVideoRemover() {
   btnExport?.addEventListener('click', async () => {
     if (!currentFile || !videoEngine) return;
 
+    tgHaptic.impact('medium');
     handleExportAd();
 
     tunerContainer.classList.add('hidden');
@@ -1796,18 +1895,24 @@ function initVideoRemover() {
               <video src="${res.url}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
           </div>
-          <div class="mt-4 text-center">
+          <div class="mt-4 flex flex-wrap justify-center gap-3">
             <a href="${res.url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
               Download Cleaned Video MP4
+            </a>
+            <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
+              <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
+              Share on Telegram
             </a>
           </div>
           ${getPromoCardHtml('video')}
         </div>
       `;
+      tgHaptic.notification('success');
       smoothScrollTo(resultsArea);
     } catch (err) {
       console.error(err);
+      tgHaptic.notification('error');
       statusContainer.classList.add('hidden');
       tunerContainer.classList.remove('hidden');
       alert(`Video processing failed: ${err.message || err}`);
