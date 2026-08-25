@@ -1,6 +1,8 @@
 // ── Direct Link Configuration (Monetag) ──
-const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
-const MONETAG_EXPORT_DIRECT_LINK = 'https://omg10.com/4/11584190';
+// const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
+// const MONETAG_EXPORT_DIRECT_LINK = 'https://omg10.com/4/11584190';
+const MONETAG_DIRECT_LINK = '';
+const MONETAG_EXPORT_DIRECT_LINK = '';
 
 // ── Telegram Mini App (TMA) Integration & Haptics ──
 const tgApp = typeof window !== 'undefined' && window.Telegram ? window.Telegram.WebApp : null;
@@ -91,17 +93,17 @@ window.handleShareClick = handleShareClick;
 
 function handleDownloadAd() {
   tgHaptic.impact('medium');
-  if (MONETAG_DIRECT_LINK) {
-    openExternalLink(MONETAG_DIRECT_LINK);
-  }
+  // if (MONETAG_DIRECT_LINK) {
+  //   openExternalLink(MONETAG_DIRECT_LINK);
+  // }
 }
 window.handleDownloadAd = handleDownloadAd;
 
 function handleExportAd() {
   tgHaptic.impact('medium');
-  if (MONETAG_EXPORT_DIRECT_LINK) {
-    openExternalLink(MONETAG_EXPORT_DIRECT_LINK);
-  }
+  // if (MONETAG_EXPORT_DIRECT_LINK) {
+  //   openExternalLink(MONETAG_EXPORT_DIRECT_LINK);
+  // }
 }
 window.handleExportAd = handleExportAd;
 
