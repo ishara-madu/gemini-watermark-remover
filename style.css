@@ -2292,3 +2292,10 @@ body.is-telegram-webapp {
 .is-telegram-webapp .slider {
   touch-action: manipulation;
 }
+
+.cleaned-result-media {
+  -webkit-touch-callout: default !important;
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+  pointer-events: auto !important;
+}
