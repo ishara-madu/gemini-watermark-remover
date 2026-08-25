@@ -228,8 +228,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./style.css" />
   <script defer src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
-  <!-- Telegram Web App SDK -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 
 <body>
@@ -1114,8 +1112,6 @@
     (function () {
       function loadBMCWidget() {
         if (window.__bmcWidgetLoaded) return;
-        // Don't render floating widget over Telegram Mini App UI
-        if (window.Telegram?.WebApp?.initData) return;
         window.__bmcWidgetLoaded = true;
         var bmc = document.createElement('script');
         bmc.setAttribute('data-name', 'BMC-Widget');
