@@ -89,95 +89,6 @@ function handleShareClick(e, url) {
 }
 window.handleShareClick = handleShareClick;
 
-// ── Universal File Saver for Mobile, Telegram Mini App & Desktop ──
-let activeCleanFile = null;
-let activeCleanFileBlob = null;
-let activeCleanFileName = '';
-let activeCleanDataUrl = '';
-
-function showSaveToast(message, isTelegram = false) {
-  let toast = document.getElementById('app-save-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'app-save-toast';
-    toast.className = 'save-toast';
-    document.body.appendChild(toast);
-  }
-  toast.innerHTML = `
-    <div class="toast-content">
-      <iconify-icon icon="ph:check-circle-fill" width="22" style="color: #22c55e; flex-shrink: 0;"></iconify-icon>
-      <div class="toast-text">
-        <p class="toast-title">${message}</p>
-        ${isTelegram ? '<p class="toast-sub">💡 Long-press (තත්පර 2ක් ඔබාගෙන සිටින්න) image above to Save to Photos</p>' : ''}
-      </div>
-    </div>
-  `;
-  toast.classList.add('show');
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, 4500);
-}
-window.showSaveToast = showSaveToast;
-
-function triggerAnchorDownload(fileDataOrUrl, fileName, isTelegram) {
-  if (!fileDataOrUrl) return;
-  try {
-    const url = (fileDataOrUrl instanceof Blob) ? URL.createObjectURL(fileDataOrUrl) : fileDataOrUrl;
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      try { document.body.removeChild(a); } catch (e) {}
-    }, 500);
-
-    tgHaptic.notification('success');
-    showSaveToast('Download initiated!', isTelegram);
-
-    // Only open Monetag ad on standalone browsers (never inside Telegram)
-    if (!isTelegram && MONETAG_DIRECT_LINK) {
-      setTimeout(() => {
-        openExternalLink(MONETAG_DIRECT_LINK);
-      }, 2000);
-    }
-  } catch (e) {
-    console.error('Anchor download failed:', e);
-  }
-}
-
-function saveCleanedFile(customFile, fileName, mimeType = 'image/png') {
-  tgHaptic.impact('medium');
-
-  const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
-  const isMobile = isTelegram || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-  const targetFile = customFile || activeCleanFile;
-  const targetFileName = fileName || activeCleanFileName || (mimeType.startsWith('video') ? 'cleaned_video.mp4' : 'cleaned_image.png');
-  const targetUrl = activeCleanDataUrl || (activeCleanFileBlob ? URL.createObjectURL(activeCleanFileBlob) : null);
-
-  // Method 1: Web Share API (Direct synchronous call within user click to preserve User Activation)
-  if (isMobile && targetFile && navigator.canShare && navigator.canShare({ files: [targetFile] })) {
-    navigator.share({
-      files: [targetFile],
-      title: targetFileName
-    }).then(() => {
-      tgHaptic.notification('success');
-      showSaveToast('Saved / Shared successfully!', isTelegram);
-    }).catch((err) => {
-      if (err.name !== 'AbortError') {
-        triggerAnchorDownload(targetUrl || activeCleanFileBlob, targetFileName, isTelegram);
-      }
-    });
-    return;
-  }
-
-  // Method 2: Anchor Download
-  triggerAnchorDownload(targetUrl || activeCleanFileBlob, targetFileName, isTelegram);
-}
-window.saveCleanedFile = saveCleanedFile;
-
 function handleDownloadAd() {
   tgHaptic.impact('medium');
   if (MONETAG_DIRECT_LINK) {
@@ -1503,13 +1414,7 @@ function initImageRemover() {
 
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const originalUrl = URL.createObjectURL(currentFile);
-      const dataUrl = canvas.toDataURL('image/png');
-      const cleanFile = new File([blob], `clean_${currentFile.name}`, { type: 'image/png' });
-
-      activeCleanFile = cleanFile;
-      activeCleanFileBlob = blob;
-      activeCleanFileName = `clean_${currentFile.name}`;
-      activeCleanDataUrl = dataUrl;
+      const url = URL.createObjectURL(blob);
 
       resultsArea.classList.remove('hidden');
       resultsArea.innerHTML = `
@@ -1523,20 +1428,17 @@ function initImageRemover() {
               </div>
             </div>
             <div>
-              <div class="flex items-center justify-between mb-2">
-                <p class="text-xs text-green-600 font-bold">Cleaned Result</p>
-                <span class="text-xs text-muted" style="font-size: 0.72rem;">(Long-press to save)</span>
-              </div>
+              <p class="text-xs mb-2 text-green-600">Cleaned Result</p>
               <div class="checker p-2 text-center">
-                <img src="${dataUrl}" alt="Cleaned result image without watermark" class="saveable-image" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%; -webkit-touch-callout: default; user-select: auto;" />
+                <img src="${url}" alt="Cleaned result image without watermark" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%;" />
               </div>
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
-            <button type="button" class="btn btn-primary" onclick="saveCleanedFile(null, 'clean_${currentFile.name}', 'image/png')">
+            <a href="${url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
-              Save Cleaned PNG
-            </button>
+              Download Cleaned PNG
+            </a>
             <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
               <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
               Share on Telegram
@@ -1977,12 +1879,6 @@ function initVideoRemover() {
         }
       });
 
-      const cleanFile = new File([res.blob], `clean_${currentFile.name}`, { type: res.mime || 'video/mp4' });
-      activeCleanFile = cleanFile;
-      activeCleanFileBlob = res.blob;
-      activeCleanFileName = `clean_${currentFile.name}`;
-      activeCleanDataUrl = res.url;
-
       statusContainer.classList.add('hidden');
       resultsArea.classList.remove('hidden');
 
@@ -1995,20 +1891,15 @@ function initVideoRemover() {
               <video src="${res.originalUrl}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
             <div>
-              <div class="flex items-center justify-between mb-2">
-                <p class="text-xs text-green-600 font-bold">Cleaned Video</p>
-                <span class="text-xs text-muted" style="font-size: 0.72rem;">(Long-press to save)</span>
-              </div>
-              <div class="checker p-2 text-center">
-                <video src="${res.url}" controls playsinline class="saveable-image" style="width:100%; max-height:280px;"></video>
-              </div>
+              <p class="text-xs mb-2 text-green-600">Cleaned Video</p>
+              <video src="${res.url}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
-            <button type="button" class="btn btn-primary" onclick="saveCleanedFile(null, 'clean_${currentFile.name}', 'video/mp4')">
+            <a href="${res.url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
-              Save Cleaned Video MP4
-            </button>
+              Download Cleaned Video MP4
+            </a>
             <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
               <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
               Share on Telegram
