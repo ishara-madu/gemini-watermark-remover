@@ -104,21 +104,115 @@ let lastCleanedVideo = {
   fileName: ''
 };
 
+function showToast(message, duration = 3500) {
+  let toast = document.getElementById('global-app-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'global-app-toast';
+    toast.className = 'app-toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<iconify-icon icon="ph:info-bold" width="18" style="color: #6366f1;"></iconify-icon> <span>${message}</span>`;
+  toast.classList.add('show');
+  clearTimeout(window.__toastTimeout);
+  window.__toastTimeout = setTimeout(() => {
+    toast.classList.remove('show');
+  }, duration);
+}
+window.showToast = showToast;
+
+async function uploadToTemporaryHost(blob, fileName) {
+  const formData = new FormData();
+  formData.append('reqtype', 'fileupload');
+  formData.append('time', '1h');
+  formData.append('fileToUpload', blob, fileName);
+
+  const response = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error('Upload failed with status ' + response.status);
+  }
+
+  const url = await response.text();
+  return url.trim();
+}
+
 async function downloadCleanedMedia(type = 'image') {
   tgHaptic.impact('medium');
 
   const isImage = type === 'image';
   const data = isImage ? lastCleanedImage : lastCleanedVideo;
-  if (!data) return;
+  if (!data || !data.blob) return;
 
   const fileName = data.fileName || (isImage ? 'cleaned_image.png' : 'cleaned_video.mp4');
   const mimeType = isImage ? 'image/png' : 'video/mp4';
   const blob = data.blob;
 
-  // Layer 1: Native Web Share API (Primary for Mobile & Telegram Mini App)
-  // On iOS (Telegram/Safari), this immediately opens the native Save Image / Save to Files sheet!
-  // On Android (Telegram/Chrome), this opens the native Save to Photos / Device sheet!
-  if (blob && navigator.share && navigator.canShare) {
+  const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
+  const isMobile = isTelegram || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // Strategy 1: If inside Telegram Mini App (Android / iOS)
+  if (isTelegram) {
+    showToast('Preparing download for Telegram...');
+
+    // 1.1 Try Native Telegram WebApp downloadFile API (Bot API 7.7+)
+    if (typeof window.Telegram.WebApp.downloadFile === 'function') {
+      try {
+        const httpsUrl = await uploadToTemporaryHost(blob, fileName);
+        window.Telegram.WebApp.downloadFile({
+          url: httpsUrl,
+          file_name: fileName
+        }, (accepted) => {
+          if (accepted) {
+            tgHaptic.notification('success');
+            showToast('Download started in Telegram!');
+          }
+        });
+        return;
+      } catch (err) {
+        console.warn('Telegram downloadFile failed, trying fallback:', err);
+      }
+    }
+
+    // 1.2 Try Web Share API (Works natively in iOS Telegram & Safari)
+    if (navigator.share && navigator.canShare) {
+      try {
+        const file = new File([blob], fileName, { type: mimeType });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: fileName
+          });
+          tgHaptic.notification('success');
+          return;
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('Web Share API error in Telegram, trying browser open:', err);
+      }
+    }
+
+    // 1.3 Telegram Fallback: Upload & Open Direct Link in System Browser (Chrome / Safari)
+    try {
+      showToast('Opening in browser to download...');
+      const httpsUrl = await uploadToTemporaryHost(blob, fileName);
+      if (window.Telegram.WebApp.openLink) {
+        window.Telegram.WebApp.openLink(httpsUrl);
+      } else {
+        window.open(httpsUrl, '_blank');
+      }
+      tgHaptic.notification('success');
+      return;
+    } catch (err) {
+      console.warn('Temporary host upload failed:', err);
+    }
+  }
+
+  // Strategy 2: Standard Mobile Browsers (Chrome / Safari / Firefox)
+  if (isMobile && navigator.share && navigator.canShare) {
     try {
       const file = new File([blob], fileName, { type: mimeType });
       if (navigator.canShare({ files: [file] })) {
@@ -130,35 +224,34 @@ async function downloadCleanedMedia(type = 'image') {
         return;
       }
     } catch (err) {
-      if (err.name === 'AbortError') return; // User closed sheet intentionally
-      console.warn('Web Share API error, falling back to direct anchor:', err);
+      if (err.name === 'AbortError') return;
+      console.warn('Mobile share failed:', err);
     }
   }
 
-  // Layer 2: Blob Anchor Download (Desktop Chrome, Edge, Firefox, Mac Safari)
-  if (blob) {
-    try {
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = blobUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        try {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-        } catch (e) {}
-      }, 2000);
-      tgHaptic.notification('success');
-      return;
-    } catch (e) {
-      console.error('Anchor download error:', e);
-    }
+  // Strategy 3: Desktop Browsers (Chrome, Edge, Firefox, Mac Safari Anchor Download)
+  try {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {}
+    }, 2000);
+    tgHaptic.notification('success');
+    showToast('Download started!');
+    return;
+  } catch (e) {
+    console.error('Anchor download error:', e);
   }
 
-  // Layer 3: Direct DataURL / Blob Window Open (Fallback for webviews without download support)
+  // Strategy 4: Direct Window Open (Final fallback)
   const fallbackUrl = data.dataUrl || data.url;
   if (fallbackUrl) {
     try {
