@@ -91,34 +91,36 @@ function handleShareClick(e, url) {
 }
 window.handleShareClick = handleShareClick;
 
-// ── Universal File Saver for Mobile, Telegram WebApp & Desktop ──
-let currentCleanedImageData = {
+// ── Universal File Saver Engine for Telegram Mini App, iOS, Android & Desktop ──
+let lastCleanedImage = {
   blob: null,
   dataUrl: '',
-  fileName: '',
-  mime: 'image/png'
+  fileName: ''
 };
 
-let currentCleanedVideoData = {
+let lastCleanedVideo = {
   blob: null,
   url: '',
-  fileName: '',
-  mime: 'video/mp4'
+  fileName: ''
 };
 
-async function downloadOrSaveFile(type = 'image') {
+async function downloadCleanedMedia(type = 'image') {
   tgHaptic.impact('medium');
 
-  const data = type === 'video' ? currentCleanedVideoData : currentCleanedImageData;
-  if (!data || (!data.blob && !data.dataUrl && !data.url)) return;
+  const isImage = type === 'image';
+  const data = isImage ? lastCleanedImage : lastCleanedVideo;
+  if (!data) return;
 
-  const fileName = data.fileName || (type === 'video' ? 'cleaned_video.mp4' : 'cleaned_image.png');
-  const mimeType = data.mime || (type === 'video' ? 'video/mp4' : 'image/png');
+  const fileName = data.fileName || (isImage ? 'cleaned_image.png' : 'cleaned_video.mp4');
+  const mimeType = isImage ? 'image/png' : 'video/mp4';
+  const blob = data.blob;
 
-  // Strategy 1: Native Web Share API (Works natively in iOS Safari, Telegram iOS & Android to Save to Photos/Gallery)
-  if (data.blob && navigator.canShare) {
+  // Layer 1: Native Web Share API (Primary for Mobile & Telegram Mini App)
+  // On iOS (Telegram/Safari), this immediately opens the native Save Image / Save to Files sheet!
+  // On Android (Telegram/Chrome), this opens the native Save to Photos / Device sheet!
+  if (blob && navigator.share && navigator.canShare) {
     try {
-      const file = new File([data.blob], fileName, { type: mimeType });
+      const file = new File([blob], fileName, { type: mimeType });
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
@@ -128,31 +130,49 @@ async function downloadOrSaveFile(type = 'image') {
         return;
       }
     } catch (err) {
-      if (err.name === 'AbortError') return; // User closed share sheet
-      console.warn('navigator.share fallback to anchor:', err);
+      if (err.name === 'AbortError') return; // User closed sheet intentionally
+      console.warn('Web Share API error, falling back to direct anchor:', err);
     }
   }
 
-  // Strategy 2: Anchor download fallback (Desktop Chrome/Firefox/Edge)
-  try {
-    const downloadUrl = data.dataUrl || data.url || (data.blob ? URL.createObjectURL(data.blob) : '');
-    if (downloadUrl) {
+  // Layer 2: Blob Anchor Download (Desktop Chrome, Edge, Firefox, Mac Safari)
+  if (blob) {
+    try {
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = downloadUrl;
+      a.style.display = 'none';
+      a.href = blobUrl;
       a.download = fileName;
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
-        try { document.body.removeChild(a); } catch (e) {}
-      }, 500);
+        try {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        } catch (e) {}
+      }, 2000);
       tgHaptic.notification('success');
+      return;
+    } catch (e) {
+      console.error('Anchor download error:', e);
     }
-  } catch (e) {
-    console.error('Anchor download failed:', e);
+  }
+
+  // Layer 3: Direct DataURL / Blob Window Open (Fallback for webviews without download support)
+  const fallbackUrl = data.dataUrl || data.url;
+  if (fallbackUrl) {
+    try {
+      const newWin = window.open(fallbackUrl, '_blank');
+      if (!newWin) {
+        window.location.href = fallbackUrl;
+      }
+      tgHaptic.notification('success');
+    } catch (e) {
+      console.error('Fallback open error:', e);
+    }
   }
 }
-window.downloadOrSaveFile = downloadOrSaveFile;
+window.downloadCleanedMedia = downloadCleanedMedia;
 
 function handleDownloadAd() {
   tgHaptic.impact('medium');
@@ -1478,15 +1498,14 @@ function initImageRemover() {
       canvas.getContext('2d').putImageData(copy, 0, 0);
 
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-      const dataUrl = canvas.toDataURL('image/png');
       const originalUrl = URL.createObjectURL(currentFile);
+      const dataUrl = canvas.toDataURL('image/png');
       const fileName = `clean_${currentFile.name}`;
 
-      currentCleanedImageData = {
+      lastCleanedImage = {
         blob: blob,
         dataUrl: dataUrl,
-        fileName: fileName,
-        mime: 'image/png'
+        fileName: fileName
       };
 
       resultsArea.classList.remove('hidden');
@@ -1503,14 +1522,14 @@ function initImageRemover() {
             <div>
               <p class="text-xs mb-2 text-green-600 font-bold">Cleaned Result</p>
               <div class="checker p-2 text-center">
-                <img src="${dataUrl}" alt="Cleaned result image without watermark" class="cleaned-result-media" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%; -webkit-touch-callout: default; user-select: auto;" />
+                <img src="${dataUrl}" alt="Cleaned result image without watermark" class="saveable-image" style="max-height: 250px; margin: 0 auto; object-fit: contain; width: 100%; -webkit-touch-callout: default; user-select: auto;" />
               </div>
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
-            <button type="button" class="btn btn-primary" onclick="downloadOrSaveFile('image')">
+            <button type="button" class="btn btn-primary" onclick="downloadCleanedMedia('image')">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
-              Save Cleaned PNG
+              Download Cleaned PNG
             </button>
             <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
               <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
@@ -1518,7 +1537,7 @@ function initImageRemover() {
             </a>
           </div>
           <p class="text-xs text-center mt-2" style="color: var(--text-muted); font-size: 0.75rem;">
-            💡 <strong>Telegram Tip:</strong> Tap <em>Save Cleaned PNG</em> to save to device, or Long-press image above to Save to Photos.
+            💡 <strong>Tip:</strong> Tap <em>Download Cleaned PNG</em> to save to device, or Long-press the image to Save to Photos.
           </p>
           ${getPromoCardHtml('image')}
         </div>
@@ -1956,11 +1975,10 @@ function initVideoRemover() {
       });
 
       const fileName = `clean_${currentFile.name}`;
-      currentCleanedVideoData = {
+      lastCleanedVideo = {
         blob: res.blob,
         url: res.url,
-        fileName: fileName,
-        mime: res.mime || 'video/mp4'
+        fileName: fileName
       };
 
       statusContainer.classList.add('hidden');
@@ -1975,14 +1993,14 @@ function initVideoRemover() {
               <video src="${res.originalUrl}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
             <div>
-              <p class="text-xs mb-2 text-green-600 font-bold">Cleaned Video</p>
-              <video src="${res.url}" controls playsinline class="cleaned-result-media" style="width:100%; max-height:280px;"></video>
+              <p class="text-xs mb-2 text-green-600">Cleaned Video</p>
+              <video src="${res.url}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
           </div>
           <div class="mt-4 flex flex-wrap justify-center gap-3">
-            <button type="button" class="btn btn-primary" onclick="downloadOrSaveFile('video')">
+            <button type="button" class="btn btn-primary" onclick="downloadCleanedMedia('video')">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
-              Save Cleaned Video MP4
+              Download Cleaned Video MP4
             </button>
             <a href="https://t.me/share/url?url=https%3A%2F%2Fishara-madu.github.io%2Fgemini-watermark-remover%2F&text=Remove%20Google%20Gemini%20and%20Veo%20watermarks%20instantly%20with%20zero%20quality%20loss!" class="btn btn-secondary" onclick="handleShareClick(event, this.href)">
               <iconify-icon icon="logos:telegram" width="16"></iconify-icon>
@@ -1990,7 +2008,7 @@ function initVideoRemover() {
             </a>
           </div>
           <p class="text-xs text-center mt-2" style="color: var(--text-muted); font-size: 0.75rem;">
-            💡 <strong>Telegram Tip:</strong> Tap <em>Save Cleaned Video MP4</em> to save to device.
+            💡 <strong>Tip:</strong> Tap <em>Download Cleaned Video MP4</em> to save or share.
           </p>
           ${getPromoCardHtml('video')}
         </div>

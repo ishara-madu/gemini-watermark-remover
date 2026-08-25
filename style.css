@@ -2293,7 +2293,7 @@ body.is-telegram-webapp {
   touch-action: manipulation;
 }
 
-.cleaned-result-media {
+.saveable-image {
   -webkit-touch-callout: default !important;
   user-select: auto !important;
   -webkit-user-select: auto !important;
