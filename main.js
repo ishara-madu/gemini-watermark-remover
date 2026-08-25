@@ -148,56 +148,14 @@ async function downloadCleanedMedia(type = 'image') {
   if (!data || !data.blob) return;
 
   const fileName = data.fileName || (isImage ? 'cleaned_image.png' : 'cleaned_video.mp4');
-  const mimeType = isImage ? 'image/png' : 'video/mp4';
   const blob = data.blob;
 
   const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
-  const isMobile = isTelegram || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // Strategy 1: If inside Telegram Mini App (Android / iOS)
+  // If inside Telegram Mini App: Upload to fast HTTPS host and open in system browser (Chrome/Safari) for direct download
   if (isTelegram) {
-    showToast('Preparing download for Telegram...');
-
-    // 1.1 Try Native Telegram WebApp downloadFile API (Bot API 7.7+)
-    if (typeof window.Telegram.WebApp.downloadFile === 'function') {
-      try {
-        const httpsUrl = await uploadToTemporaryHost(blob, fileName);
-        window.Telegram.WebApp.downloadFile({
-          url: httpsUrl,
-          file_name: fileName
-        }, (accepted) => {
-          if (accepted) {
-            tgHaptic.notification('success');
-            showToast('Download started in Telegram!');
-          }
-        });
-        return;
-      } catch (err) {
-        console.warn('Telegram downloadFile failed, trying fallback:', err);
-      }
-    }
-
-    // 1.2 Try Web Share API (Works natively in iOS Telegram & Safari)
-    if (navigator.share && navigator.canShare) {
-      try {
-        const file = new File([blob], fileName, { type: mimeType });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: fileName
-          });
-          tgHaptic.notification('success');
-          return;
-        }
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        console.warn('Web Share API error in Telegram, trying browser open:', err);
-      }
-    }
-
-    // 1.3 Telegram Fallback: Upload & Open Direct Link in System Browser (Chrome / Safari)
+    showToast('Opening in browser to download...');
     try {
-      showToast('Opening in browser to download...');
       const httpsUrl = await uploadToTemporaryHost(blob, fileName);
       if (window.Telegram.WebApp.openLink) {
         window.Telegram.WebApp.openLink(httpsUrl);
@@ -207,29 +165,12 @@ async function downloadCleanedMedia(type = 'image') {
       tgHaptic.notification('success');
       return;
     } catch (err) {
-      console.warn('Temporary host upload failed:', err);
+      console.warn('Upload error:', err);
+      showToast('⚠️ Could not open in browser, trying direct save...');
     }
   }
 
-  // Strategy 2: Standard Mobile Browsers (Chrome / Safari / Firefox)
-  if (isMobile && navigator.share && navigator.canShare) {
-    try {
-      const file = new File([blob], fileName, { type: mimeType });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: fileName
-        });
-        tgHaptic.notification('success');
-        return;
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      console.warn('Mobile share failed:', err);
-    }
-  }
-
-  // Strategy 3: Desktop Browsers (Chrome, Edge, Firefox, Mac Safari Anchor Download)
+  // Standard Desktop & Browser Anchor Download
   try {
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -246,23 +187,8 @@ async function downloadCleanedMedia(type = 'image') {
     }, 2000);
     tgHaptic.notification('success');
     showToast('Download started!');
-    return;
   } catch (e) {
     console.error('Anchor download error:', e);
-  }
-
-  // Strategy 4: Direct Window Open (Final fallback)
-  const fallbackUrl = data.dataUrl || data.url;
-  if (fallbackUrl) {
-    try {
-      const newWin = window.open(fallbackUrl, '_blank');
-      if (!newWin) {
-        window.location.href = fallbackUrl;
-      }
-      tgHaptic.notification('success');
-    } catch (e) {
-      console.error('Fallback open error:', e);
-    }
   }
 }
 window.downloadCleanedMedia = downloadCleanedMedia;
@@ -1629,9 +1555,6 @@ function initImageRemover() {
               Share on Telegram
             </a>
           </div>
-          <p class="text-xs text-center mt-2" style="color: var(--text-muted); font-size: 0.75rem;">
-            💡 <strong>Tip:</strong> Tap <em>Download Cleaned PNG</em> to save to device, or Long-press the image to Save to Photos.
-          </p>
           ${getPromoCardHtml('image')}
         </div>
       `;
@@ -2100,9 +2023,6 @@ function initVideoRemover() {
               Share on Telegram
             </a>
           </div>
-          <p class="text-xs text-center mt-2" style="color: var(--text-muted); font-size: 0.75rem;">
-            💡 <strong>Tip:</strong> Tap <em>Download Cleaned Video MP4</em> to save or share.
-          </p>
           ${getPromoCardHtml('video')}
         </div>
       `;
