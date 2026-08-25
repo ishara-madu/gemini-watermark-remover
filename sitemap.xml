@@ -3,20 +3,20 @@
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://ishara-madu.github.io/gemini-watermark-remover/</loc>
-    <lastmod>2026-08-23</lastmod>
+    <lastmod>2026-08-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://ishara-madu.github.io/gemini-watermark-remover/assets/logo.webp</image:loc>
-      <image:title>Free Gemini Watermark Remover Logo</image:title>
+      <image:title>Free Gemini Watermark Remover &amp; Gemini Logo Remover</image:title>
     </image:image>
     <image:image>
       <image:loc>https://ishara-madu.github.io/gemini-watermark-remover/assets/before.webp</image:loc>
-      <image:title>Google Gemini Watermark Before Removal</image:title>
+      <image:title>Google Gemini Image Before Watermark and Logo Removal</image:title>
     </image:image>
     <image:image>
       <image:loc>https://ishara-madu.github.io/gemini-watermark-remover/assets/after.webp</image:loc>
-      <image:title>Google Gemini Clean Image After Mathematical Removal</image:title>
+      <image:title>Clean Google Gemini Image After Removing Gemini Watermark</image:title>
     </image:image>
   </url>
 </urlset>
