@@ -104,91 +104,23 @@ let lastCleanedVideo = {
   fileName: ''
 };
 
-function showToast(message, duration = 3500) {
-  let toast = document.getElementById('global-app-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'global-app-toast';
-    toast.className = 'app-toast';
-    document.body.appendChild(toast);
-  }
-  toast.innerHTML = `<iconify-icon icon="ph:info-bold" width="18" style="color: #6366f1;"></iconify-icon> <span>${message}</span>`;
-  toast.classList.add('show');
-  clearTimeout(window.__toastTimeout);
-  window.__toastTimeout = setTimeout(() => {
-    toast.classList.remove('show');
-  }, duration);
-}
-window.showToast = showToast;
-
-async function uploadToTemporaryHost(blob, fileName) {
-  const formData = new FormData();
-  formData.append('reqtype', 'fileupload');
-  formData.append('time', '1h');
-  formData.append('fileToUpload', blob, fileName);
-
-  const response = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
-    method: 'POST',
-    body: formData
-  });
-
-  if (!response.ok) {
-    throw new Error('Upload failed with status ' + response.status);
-  }
-
-  const url = await response.text();
-  return url.trim();
-}
-
-async function downloadCleanedMedia(type = 'image') {
+function downloadImage(imageUrl) {
+  // ටෙලිග්‍රෑම් හි ඇති ඉන්-ඇප් බ්‍රවුසර් එක වෙනුවට 
+  // ෆෝන් එකේ ප්‍රධාන බ්‍රවුසර් එකෙන් ලින්ක් එක ඕපන් කිරීමට මෙය උපකාරී වේ.
   tgHaptic.impact('medium');
+  window.open(imageUrl, '_blank');
+}
+window.downloadImage = downloadImage;
 
+function downloadCleanedMedia(type = 'image') {
+  tgHaptic.impact('medium');
   const isImage = type === 'image';
   const data = isImage ? lastCleanedImage : lastCleanedVideo;
-  if (!data || !data.blob) return;
+  if (!data) return;
 
-  const fileName = data.fileName || (isImage ? 'cleaned_image.png' : 'cleaned_video.mp4');
-  const blob = data.blob;
-
-  const isTelegram = !!(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform !== 'unknown'));
-
-  // If inside Telegram Mini App: Upload to fast HTTPS host and open in system browser (Chrome/Safari) for direct download
-  if (isTelegram) {
-    showToast('Opening in browser to download...');
-    try {
-      const httpsUrl = await uploadToTemporaryHost(blob, fileName);
-      if (window.Telegram.WebApp.openLink) {
-        window.Telegram.WebApp.openLink(httpsUrl);
-      } else {
-        window.open(httpsUrl, '_blank');
-      }
-      tgHaptic.notification('success');
-      return;
-    } catch (err) {
-      console.warn('Upload error:', err);
-      showToast('⚠️ Could not open in browser, trying direct save...');
-    }
-  }
-
-  // Standard Desktop & Browser Anchor Download
-  try {
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = blobUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      try {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      } catch (e) {}
-    }, 2000);
-    tgHaptic.notification('success');
-    showToast('Download started!');
-  } catch (e) {
-    console.error('Anchor download error:', e);
+  const url = data.dataUrl || data.url || (data.blob ? URL.createObjectURL(data.blob) : '');
+  if (url) {
+    downloadImage(url);
   }
 }
 window.downloadCleanedMedia = downloadCleanedMedia;
