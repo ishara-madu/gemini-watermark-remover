@@ -2,8 +2,20 @@
 const MONETAG_DIRECT_LINK = 'https://omg10.com/4/11542046';
 const MONETAG_EXPORT_DIRECT_LINK = 'https://omg10.com/4/11584190';
 
+// Auto-Detect Click Ad (Direct link moved from download button)
+function handleAutoDetectAd() {
+  if (MONETAG_DIRECT_LINK) {
+    try {
+      window.open(MONETAG_DIRECT_LINK, '_blank');
+    } catch (e) {
+      console.error('Failed to open Monetag direct link on auto-detect:', e);
+    }
+  }
+}
+window.handleAutoDetectAd = handleAutoDetectAd;
+
+// Download Ad (Used by Video download)
 function handleDownloadAd() {
-  // Open Monetag Direct Link
   if (MONETAG_DIRECT_LINK) {
     try {
       window.open(MONETAG_DIRECT_LINK, '_blank');
@@ -25,6 +37,22 @@ function handleExportAd() {
   }
 }
 window.handleExportAd = handleExportAd;
+
+// ── Monetag OnClick Popunder Tag Loader ──
+let isMonetagLoaded = false;
+function loadMonetagPopunder() {
+  if (isMonetagLoaded) return;
+  isMonetagLoaded = true;
+  try {
+    (function (s) {
+      s.dataset.zone = '11558621';
+      s.src = 'https://al5sm.com/tag.min.js';
+    })([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')));
+  } catch (e) {
+    console.error('Failed to load Monetag popunder script:', e);
+  }
+}
+window.loadMonetagPopunder = loadMonetagPopunder;
 
 // ── 1. Engine Core (alphaMap, blendModes, geometry, tuner) ──
 function calculateAlphaMap(bgCaptureImageData) {
@@ -1096,6 +1124,13 @@ function initImageRemover() {
   const fileInput = document.getElementById('img-input');
   const resultsArea = document.getElementById('img-results');
 
+  const stagingCard = document.getElementById('img-staging-card');
+  const stagingPreview = document.getElementById('img-staging-preview');
+  const stagingFilename = document.getElementById('img-staging-filename');
+  const stagingDims = document.getElementById('img-staging-dims');
+  const btnAutoDetect = document.getElementById('btn-img-auto-detect');
+  const btnChangeFile = document.getElementById('btn-img-change-file');
+
   const tunerContainer = document.getElementById('img-tuner-container');
   const mainCanvas = document.getElementById('img-main-canvas');
   const zoomCanvas = document.getElementById('img-zoom-canvas');
@@ -1368,7 +1403,7 @@ function initImageRemover() {
     if (!file.type.startsWith('image/')) return;
     if (isProcessing) return;
 
-    setDropzoneLoading(true, 'Processing & Detecting Watermark...');
+    setDropzoneLoading(true, 'Loading image preview...');
     currentFile = file;
 
     resultsArea.classList.add('hidden');
@@ -1380,6 +1415,43 @@ function initImageRemover() {
       }
 
       currentPreviewFrame = await grabImageFrame(file);
+
+      // Populate staging card
+      if (stagingPreview) {
+        stagingPreview.src = URL.createObjectURL(file);
+      }
+      if (stagingFilename) {
+        stagingFilename.textContent = file.name;
+      }
+      if (stagingDims) {
+        stagingDims.textContent = `${currentPreviewFrame.width} × ${currentPreviewFrame.height} px`;
+      }
+
+      // Hide dropzone and show staging card
+      dropzone.classList.add('hidden');
+      if (stagingCard) {
+        stagingCard.classList.remove('hidden');
+        smoothScrollTo(stagingCard);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error loading image: ' + (err.message || err));
+    } finally {
+      setDropzoneLoading(false);
+    }
+  }
+
+  // Handle "Try Auto Detect" button (triggers Direct Link & reveals tuner)
+  btnAutoDetect?.addEventListener('click', async () => {
+    if (!currentFile || !watermarkEngine || !currentPreviewFrame) return;
+
+    // Trigger Monetag Direct Link (formerly on Download button)
+    handleAutoDetectAd();
+
+    // Hide staging card
+    if (stagingCard) stagingCard.classList.add('hidden');
+
+    try {
       currentBase = watermarkEngine.getWatermarkInfo(currentPreviewFrame.width, currentPreviewFrame.height);
       if (currentOriginalBitmap) currentOriginalBitmap.close();
       currentOriginalBitmap = await createImageBitmap(currentPreviewFrame.imageData);
@@ -1391,16 +1463,36 @@ function initImageRemover() {
       applyAutoSettings();
       smoothScrollTo(tunerContainer);
     } catch (err) {
-      console.error(err);
-    } finally {
-      setDropzoneLoading(false);
+      console.error('Error running auto detection:', err);
     }
+  });
+
+  // Reset/Change Image Helper
+  function resetImageUploader() {
+    if (stagingCard) stagingCard.classList.add('hidden');
+    tunerContainer.classList.add('hidden');
+    resultsArea.classList.add('hidden');
+    dropzone.classList.remove('hidden');
+    fileInput.value = '';
+    currentFile = null;
+    currentPreviewFrame = null;
+    if (currentOriginalBitmap) {
+      currentOriginalBitmap.close();
+      currentOriginalBitmap = null;
+    }
+    smoothScrollTo(dropzone);
   }
+
+  btnChangeFile?.addEventListener('click', resetImageUploader);
+  document.getElementById('btn-img-change-file-tuner')?.addEventListener('click', resetImageUploader);
 
   btnExport?.addEventListener('click', async () => {
     if (!currentFile || !watermarkEngine || !currentPreviewFrame) return;
 
     handleExportAd();
+
+    // Preload Monetag Popunder for the Download button
+    loadMonetagPopunder();
 
     tunerContainer.classList.add('hidden');
     resultsArea.classList.add('hidden');
@@ -1437,15 +1529,22 @@ function initImageRemover() {
               </div>
             </div>
           </div>
-          <div class="mt-4 text-center">
-            <a href="${url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
+          <div class="mt-4 text-center flex items-center justify-center gap-3">
+            <a href="${url}" download="clean_${currentFile.name}" class="btn btn-primary" id="btn-img-download">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
               Download Cleaned PNG
             </a>
+            <button type="button" class="btn btn-secondary text-xs" id="btn-img-clean-another">
+              <iconify-icon icon="ph:arrows-clockwise" width="16"></iconify-icon>
+              Clean Another
+            </button>
           </div>
           ${getPromoCardHtml('image')}
         </div>
       `;
+
+      document.getElementById('btn-img-clean-another')?.addEventListener('click', resetImageUploader);
+
       smoothScrollTo(resultsArea);
     } catch (err) {
       console.error(err);
@@ -1461,6 +1560,13 @@ function initVideoRemover() {
   const progressBar = document.getElementById('video-progress-bar');
   const progressText = document.getElementById('video-progress-text');
   const resultsArea = document.getElementById('video-results');
+
+  const stagingCard = document.getElementById('video-staging-card');
+  const stagingPreview = document.getElementById('video-staging-preview');
+  const stagingFilename = document.getElementById('video-staging-filename');
+  const stagingDims = document.getElementById('video-staging-dims');
+  const btnAutoDetect = document.getElementById('btn-video-auto-detect');
+  const btnChangeFile = document.getElementById('btn-video-change-file');
 
   const tunerContainer = document.getElementById('video-tuner-container');
   const mainCanvas = document.getElementById('video-main-canvas');
@@ -1841,7 +1947,7 @@ function initVideoRemover() {
     if (!file.type.startsWith('video/')) return;
     if (isProcessing) return;
 
-    setDropzoneLoading(true, 'Extracting Best Frame & Analyzing...');
+    setDropzoneLoading(true, 'Extracting best preview frame...');
     currentFile = file;
 
     resultsArea.classList.add('hidden');
@@ -1854,6 +1960,47 @@ function initVideoRemover() {
       }
 
       currentPreviewFrame = await grabPreviewFrame(file);
+
+      // Render video thumbnail to staging card
+      if (stagingPreview) {
+        const c = document.createElement('canvas');
+        c.width = currentPreviewFrame.width;
+        c.height = currentPreviewFrame.height;
+        c.getContext('2d').putImageData(currentPreviewFrame.imageData, 0, 0);
+        stagingPreview.src = c.toDataURL('image/jpeg', 0.85);
+      }
+      if (stagingFilename) {
+        stagingFilename.textContent = file.name;
+      }
+      if (stagingDims) {
+        stagingDims.textContent = `${currentPreviewFrame.width} × ${currentPreviewFrame.height} px`;
+      }
+
+      // Hide dropzone and show staging card
+      dropzone.classList.add('hidden');
+      if (stagingCard) {
+        stagingCard.classList.remove('hidden');
+        smoothScrollTo(stagingCard);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Could not generate preview frame for video: ' + (err.message || err));
+    } finally {
+      setDropzoneLoading(false);
+    }
+  }
+
+  // Handle "Try Auto Detect" button (triggers Direct Link & reveals tuner)
+  btnAutoDetect?.addEventListener('click', async () => {
+    if (!currentFile || !videoEngine || !currentPreviewFrame) return;
+
+    // Trigger Monetag Direct Link (formerly on Download button)
+    handleAutoDetectAd();
+
+    // Hide staging card
+    if (stagingCard) stagingCard.classList.add('hidden');
+
+    try {
       currentBase = videoEngine.getVeoWatermark(currentPreviewFrame.width, currentPreviewFrame.height);
       if (currentOriginalBitmap) currentOriginalBitmap.close();
       currentOriginalBitmap = await createImageBitmap(currentPreviewFrame.imageData);
@@ -1865,17 +2012,37 @@ function initVideoRemover() {
       applyAutoSettings();
       smoothScrollTo(tunerContainer);
     } catch (err) {
-      console.error(err);
-      alert('Could not generate preview frame for video: ' + (err.message || err));
-    } finally {
-      setDropzoneLoading(false);
+      console.error('Error running video auto detection:', err);
     }
+  });
+
+  // Reset/Change Video Helper
+  function resetVideoUploader() {
+    if (stagingCard) stagingCard.classList.add('hidden');
+    tunerContainer.classList.add('hidden');
+    statusContainer.classList.add('hidden');
+    resultsArea.classList.add('hidden');
+    dropzone.classList.remove('hidden');
+    fileInput.value = '';
+    currentFile = null;
+    currentPreviewFrame = null;
+    if (currentOriginalBitmap) {
+      currentOriginalBitmap.close();
+      currentOriginalBitmap = null;
+    }
+    smoothScrollTo(dropzone);
   }
+
+  btnChangeFile?.addEventListener('click', resetVideoUploader);
+  document.getElementById('btn-video-change-file-tuner')?.addEventListener('click', resetVideoUploader);
 
   btnExport?.addEventListener('click', async () => {
     if (!currentFile || !videoEngine) return;
 
     handleExportAd();
+
+    // Preload Monetag Popunder for Download button
+    loadMonetagPopunder();
 
     tunerContainer.classList.add('hidden');
     statusContainer.classList.remove('hidden');
@@ -1910,15 +2077,22 @@ function initVideoRemover() {
               <video src="${res.url}" controls playsinline style="width:100%; max-height:280px;"></video>
             </div>
           </div>
-          <div class="mt-4 text-center">
-            <a href="${res.url}" download="clean_${currentFile.name}" class="btn btn-primary" onclick="handleDownloadAd()">
+          <div class="mt-4 text-center flex items-center justify-center gap-3">
+            <a href="${res.url}" download="clean_${currentFile.name}" class="btn btn-primary" id="btn-video-download">
               <iconify-icon icon="ph:download-simple-bold" width="16"></iconify-icon>
               Download Cleaned Video MP4
             </a>
+            <button type="button" class="btn btn-secondary text-xs" id="btn-video-clean-another">
+              <iconify-icon icon="ph:arrows-clockwise" width="16"></iconify-icon>
+              Clean Another Video
+            </button>
           </div>
           ${getPromoCardHtml('video')}
         </div>
       `;
+
+      document.getElementById('btn-video-clean-another')?.addEventListener('click', resetVideoUploader);
+
       smoothScrollTo(resultsArea);
     } catch (err) {
       console.error(err);

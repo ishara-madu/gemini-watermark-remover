@@ -778,11 +778,71 @@ body {
 #comparison,
 #features,
 #faq,
+.staging-card,
 .tuner-container,
 #img-results,
 #video-results,
 #video-status {
   scroll-margin-top: 5.5rem;
+}
+
+.staging-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--bg-card-border);
+  text-align: center;
+}
+
+.staging-preview-box {
+  max-width: 320px;
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  margin: 0 auto;
+}
+
+.staging-preview-box img {
+  max-height: 220px;
+  width: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
+.staging-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.staging-filename {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-main);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staging-dims {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.staging-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .tuner-container {
