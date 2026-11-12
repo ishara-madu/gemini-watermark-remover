@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Gemini Watermark Auto-Cleaner</title>
+  <style>
+    :root {
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --brand: #4f46e5;
+      --green: #16a34a;
+      --red: #dc2626;
+    }
+
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 14px;
+      font: 13px/1.4 system-ui, sans-serif;
+      color: var(--text);
+      background: #ffffff;
+    }
+
+    h1 {
+      font-size: 15px;
+      margin: 0 0 10px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .site {
+      color: var(--muted);
+      word-break: break-all;
+      font-size: 12px;
+    }
+
+    label.field {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    label.field input {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 3px;
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      color: var(--text);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 10px 0;
+    }
+
+    .log {
+      max-height: 150px;
+      overflow-y: auto;
+      font-size: 11px;
+    }
+
+    .log div {
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log .success { color: var(--green); }
+    .log .error { color: var(--red); }
+    .log .empty { color: var(--muted); }
+  </style>
+</head>
+
+<body>
+  <h1>Gemini Watermark Auto-Cleaner</h1>
+
+  <div class="row">
+    <span>Extension on</span>
+    <input type="checkbox" id="opt-enabled" />
+  </div>
+
+  <div class="row">
+    <div>
+      <div>Clean downloads from this site</div>
+      <div id="site-origin" class="site">—</div>
+    </div>
+    <input type="checkbox" id="opt-site" />
+  </div>
+
+  <hr />
+
+  <label class="field">Save to (folder inside Downloads)
+    <input type="text" id="opt-folder" />
+  </label>
+
+  <div class="grid">
+    <label class="field">Position X (px)
+      <input type="number" id="opt-offset-x" step="1" />
+    </label>
+    <label class="field">Position Y (px)
+      <input type="number" id="opt-offset-y" step="1" />
+    </label>
+  </div>
+
+  <div class="row">
+    <span>Delete original download</span>
+    <input type="checkbox" id="opt-remove-original" />
+  </div>
+
+  <hr />
+
+  <div class="site" style="margin-bottom: 4px;">Recent activity</div>
+  <div id="log" class="log"></div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
