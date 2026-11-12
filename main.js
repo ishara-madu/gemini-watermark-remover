@@ -1018,6 +1018,7 @@ function init() {
   initTabs();
   initImageRemover();
   initVideoRemover();
+  initBatchRemover();
 }
 
 if (document.readyState === 'loading') {
@@ -1549,6 +1550,271 @@ function initImageRemover() {
     } catch (err) {
       console.error(err);
       alert('Error exporting image: ' + err.message);
+    }
+  });
+}
+
+// ── Batch Folder Image Remover (batch.html) ──
+// Reads every image in a source folder, applies the Gemini / Nano Banana preset
+// with fixed X/Y offsets, and writes cleaned PNGs into a destination folder.
+const BATCH_IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
+
+function initBatchRemover() {
+  const btnSource = document.getElementById('btn-batch-source');
+  const btnDest = document.getElementById('btn-batch-dest');
+  const btnStart = document.getElementById('btn-batch-start');
+  const lblSource = document.getElementById('lbl-batch-source');
+  const lblDest = document.getElementById('lbl-batch-dest');
+  const inputOffsetX = document.getElementById('input-batch-offset-x');
+  const inputOffsetY = document.getElementById('input-batch-offset-y');
+  const progressText = document.getElementById('batch-progress-text');
+  const progressBar = document.getElementById('batch-progress-bar');
+  const logEl = document.getElementById('batch-log');
+
+  if (!btnSource || !btnDest || !btnStart) return;
+
+  if (typeof window.showDirectoryPicker !== 'function') {
+    progressText.textContent = 'Folder access is not supported in this browser. Please use Chrome or Edge on desktop.';
+    btnSource.disabled = true;
+    btnDest.disabled = true;
+    btnStart.disabled = true;
+    const liveToggle = document.getElementById('toggle-batch-live');
+    if (liveToggle) liveToggle.disabled = true;
+    return;
+  }
+
+  let sourceDir = null;
+  let destDir = null;
+  let isRunning = false;
+
+  function updateStartState() {
+    btnStart.disabled = isRunning || liveActive || !sourceDir || !destDir;
+  }
+
+  function log(message, type = 'info') {
+    const line = document.createElement('div');
+    line.className = `batch-log-line ${type}`;
+    line.textContent = message;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  btnSource.addEventListener('click', async () => {
+    try {
+      sourceDir = await window.showDirectoryPicker({ id: 'batch-source', mode: 'read' });
+      lblSource.textContent = sourceDir.name;
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
+    updateStartState();
+  });
+
+  btnDest.addEventListener('click', async () => {
+    try {
+      destDir = await window.showDirectoryPicker({ id: 'batch-dest', mode: 'readwrite' });
+      lblDest.textContent = destDir.name;
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
+    updateStartState();
+  });
+
+  async function cleanImageFile(file, offsetX, offsetY) {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const { width, height } = bmp;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, width, height);
+    bmp.close();
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const base = watermarkEngine.getWatermarkInfo(width, height);
+    // Gemini / Nano Banana preset defaults (gain, size scale), with fixed position offsets
+    const settings = { ...getAdaptiveImagePreset('new', width, height), offsetX, offsetY };
+    cleanFrame(watermarkEngine.bg96, imageData, width, height, base, settings);
+    ctx.putImageData(imageData, 0, 0);
+
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    return { blob, width, height };
+  }
+
+  function getOffsets() {
+    return {
+      offsetX: parseInt(inputOffsetX.value, 10) || 0,
+      offsetY: parseInt(inputOffsetY.value, 10) || 0
+    };
+  }
+
+  async function prepareFolders() {
+    if ((await destDir.queryPermission({ mode: 'readwrite' })) !== 'granted' &&
+      (await destDir.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+      throw new Error('Write permission to the destination folder was denied.');
+    }
+    if (!watermarkEngine) {
+      watermarkEngine = await WatermarkEngine.create();
+    }
+    // When source and destination are the same folder, never re-process our own output
+    skipCleanOutputs = await sourceDir.isSameEntry(destDir);
+  }
+
+  async function listSourceImages() {
+    const entries = [];
+    for await (const entry of sourceDir.values()) {
+      if (entry.kind !== 'file' || !BATCH_IMAGE_EXT.test(entry.name)) continue;
+      if (skipCleanOutputs && entry.name.startsWith('clean_')) continue;
+      entries.push(entry);
+    }
+    return entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }
+
+  async function processFile(name, file) {
+    const { offsetX, offsetY } = getOffsets();
+    const { blob, width, height } = await cleanImageFile(file, offsetX, offsetY);
+    const outName = `clean_${name.replace(/\.[^.]+$/, '')}.png`;
+    const outHandle = await destDir.getFileHandle(outName, { create: true });
+    const writable = await outHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return { outName, width, height };
+  }
+
+  // ── Live watch: polls the source folder and only cleans files that appear or change after it is turned on ──
+  const LIVE_POLL_MS = 2000;
+  const toggleLive = document.getElementById('toggle-batch-live');
+  const liveStatus = document.getElementById('batch-live-status');
+  let skipCleanOutputs = false;
+  let liveActive = false;
+  let liveTimer = null;
+  let liveSeen = new Map();     // name -> lastModified already handled (or present at start)
+  let livePending = new Map();  // name -> { size, lastModified } from the previous poll, waiting to settle
+  let liveCount = 0;
+
+  function setLiveUi(on) {
+    toggleLive.checked = on;
+    btnSource.disabled = on;
+    btnDest.disabled = on;
+    liveStatus.textContent = on
+      ? `Watching "${sourceDir.name}" → "${destDir.name}" · ${liveCount} cleaned`
+      : 'Live watch is off.';
+    updateStartState();
+  }
+
+  async function livePoll() {
+    if (!liveActive) return;
+    try {
+      for (const entry of await listSourceImages()) {
+        if (!liveActive) return;
+        const file = await entry.getFile();
+        if (liveSeen.get(entry.name) === file.lastModified) continue;
+
+        // Wait until size and timestamp are unchanged across two polls so half-written downloads are skipped
+        const prev = livePending.get(entry.name);
+        if (!prev || prev.size !== file.size || prev.lastModified !== file.lastModified || file.size === 0) {
+          livePending.set(entry.name, { size: file.size, lastModified: file.lastModified });
+          continue;
+        }
+
+        livePending.delete(entry.name);
+        liveSeen.set(entry.name, file.lastModified);
+        try {
+          const { outName, width, height } = await processFile(entry.name, file);
+          liveCount++;
+          log(`✓ [live] ${entry.name} (${width}×${height}) → ${outName}`, 'success');
+        } catch (err) {
+          console.error(err);
+          log(`✗ [live] ${entry.name}: ${err.message || err}`, 'error');
+        }
+        liveStatus.textContent = `Watching "${sourceDir.name}" → "${destDir.name}" · ${liveCount} cleaned`;
+      }
+    } catch (err) {
+      console.error(err);
+      log(`✗ [live] Could not read source folder: ${err.message || err}`, 'error');
+      stopLive();
+      return;
+    }
+    if (liveActive) liveTimer = setTimeout(livePoll, LIVE_POLL_MS);
+  }
+
+  async function startLive() {
+    if (!sourceDir || !destDir || isRunning) {
+      toggleLive.checked = false;
+      liveStatus.textContent = 'Select both folders first.';
+      return;
+    }
+    try {
+      await prepareFolders();
+      // Snapshot what is already there so only new or changed files get cleaned
+      liveSeen = new Map();
+      livePending = new Map();
+      for (const entry of await listSourceImages()) {
+        liveSeen.set(entry.name, (await entry.getFile()).lastModified);
+      }
+      liveCount = 0;
+      liveActive = true;
+      setLiveUi(true);
+      log(`Live watch started. Ignoring ${liveSeen.size} existing image(s).`);
+      liveTimer = setTimeout(livePoll, LIVE_POLL_MS);
+    } catch (err) {
+      console.error(err);
+      toggleLive.checked = false;
+      liveStatus.textContent = 'Error: ' + (err.message || err);
+    }
+  }
+
+  function stopLive() {
+    if (liveActive) log(`Live watch stopped. ${liveCount} image(s) cleaned.`);
+    liveActive = false;
+    clearTimeout(liveTimer);
+    setLiveUi(false);
+  }
+
+  toggleLive?.addEventListener('change', () => {
+    if (toggleLive.checked) startLive();
+    else stopLive();
+  });
+
+  btnStart.addEventListener('click', async () => {
+    if (isRunning || liveActive || !sourceDir || !destDir) return;
+
+    isRunning = true;
+    updateStartState();
+    logEl.innerHTML = '';
+    progressBar.style.width = '0%';
+
+    try {
+      await prepareFolders();
+      const entries = await listSourceImages();
+
+      if (!entries.length) {
+        progressText.textContent = 'No images (PNG, JPG, WebP) found in the source folder.';
+        return;
+      }
+
+      let done = 0;
+      let failed = 0;
+      for (const entry of entries) {
+        progressText.textContent = `Processing ${done + failed + 1} of ${entries.length}: ${entry.name}`;
+        try {
+          const { outName, width, height } = await processFile(entry.name, await entry.getFile());
+          done++;
+          log(`✓ ${entry.name} (${width}×${height}) → ${outName}`, 'success');
+        } catch (err) {
+          failed++;
+          console.error(err);
+          log(`✗ ${entry.name}: ${err.message || err}`, 'error');
+        }
+        progressBar.style.width = `${Math.round(((done + failed) / entries.length) * 100)}%`;
+      }
+
+      progressText.textContent = `Finished: ${done} cleaned${failed ? `, ${failed} failed` : ''}. Saved to "${destDir.name}".`;
+    } catch (err) {
+      console.error(err);
+      progressText.textContent = 'Error: ' + (err.message || err);
+    } finally {
+      isRunning = false;
+      updateStartState();
     }
   });
 }

@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Watermark Auto-Cleaner",
+  "version": "1.0.0",
+  "description": "Automatically removes the Gemini / Nano Banana watermark from images you download on chosen sites.",
+  "icons": {
+    "96": "icon.png"
+  },
+  "action": {
+    "default_title": "Gemini Watermark Auto-Cleaner",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "96": "icon.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["downloads", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"]
+}

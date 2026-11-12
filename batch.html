@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Batch Folder Cleaner – Gemini Watermark Remover</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="icon" type="image/png" href="./assets/favicon-96x96.png" sizes="96x96" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css" />
+  <script defer src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    .batch-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.9rem;
+    }
+
+    .batch-row .btn {
+      min-width: 190px;
+    }
+
+    .batch-folder-name {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      word-break: break-all;
+    }
+
+    .batch-offsets {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin: 0.5rem 0 1rem;
+      font-size: 0.875rem;
+    }
+
+    .batch-offsets input {
+      width: 90px;
+      margin-left: 0.4rem;
+      padding: 0.4rem 0.5rem;
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .batch-log {
+      max-height: 320px;
+      overflow-y: auto;
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      font-family: ui-monospace, Consolas, monospace;
+    }
+
+    .batch-live-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .batch-live-toggle input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .batch-live-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: var(--bg-card-border);
+      border-radius: 9999px;
+      transition: background var(--transition-fast);
+    }
+
+    .batch-live-switch::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: #ffffff;
+      border-radius: 50%;
+      box-shadow: var(--shadow-sm);
+      transition: transform var(--transition-fast);
+    }
+
+    .batch-live-toggle input:checked + .batch-live-switch { background: var(--accent-green); }
+    .batch-live-toggle input:checked + .batch-live-switch::after { transform: translateX(18px); }
+    .batch-live-toggle input:focus-visible + .batch-live-switch { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+    .batch-live-toggle input:disabled + .batch-live-switch { opacity: 0.5; }
+
+    .batch-log-line.success { color: var(--accent-green); }
+    .batch-log-line.error { color: #dc2626; }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <section class="card mt-4">
+      <h1 class="font-bold mb-2">Batch Folder Cleaner</h1>
+      <p class="text-xs mb-4">
+        Cleans every PNG / JPG / WebP in the source folder using the <strong>Gemini / Nano Banana</strong> preset
+        (default strength &amp; size) at the position below, and saves <code>clean_&lt;name&gt;.png</code> files into
+        the destination folder. Requires Chrome or Edge on desktop.
+      </p>
+
+      <div class="batch-row">
+        <button type="button" id="btn-batch-source" class="btn btn-secondary">
+          <iconify-icon icon="ph:folder-open-bold" width="16"></iconify-icon> Choose Source Folder
+        </button>
+        <span id="lbl-batch-source" class="batch-folder-name">No folder selected</span>
+      </div>
+
+      <div class="batch-row">
+        <button type="button" id="btn-batch-dest" class="btn btn-secondary">
+          <iconify-icon icon="ph:folder-simple-plus-bold" width="16"></iconify-icon> Choose Destination Folder
+        </button>
+        <span id="lbl-batch-dest" class="batch-folder-name">No folder selected</span>
+      </div>
+
+      <div class="batch-offsets">
+        <label>Position X <input type="number" id="input-batch-offset-x" value="-41" step="1" /> px</label>
+        <label>Position Y <input type="number" id="input-batch-offset-y" value="-41" step="1" /> px</label>
+      </div>
+
+      <div class="batch-row">
+        <button type="button" id="btn-batch-start" class="btn btn-primary" disabled>
+          <iconify-icon icon="ph:eraser" width="16"></iconify-icon> Clean All Images
+        </button>
+        <label class="batch-live-toggle">
+          <input type="checkbox" id="toggle-batch-live" />
+          <span class="batch-live-switch"></span>
+          Live Watch
+        </label>
+      </div>
+      <p id="batch-live-status" class="batch-folder-name">
+        Live watch is off. When on, only images added or changed after you turn it on are cleaned.
+      </p>
+
+      <div class="mt-4 text-center">
+        <div class="progress-bar-container">
+          <div id="batch-progress-bar" class="progress-bar-fill"></div>
+        </div>
+        <p id="batch-progress-text" class="progress-text">Select both folders to begin.</p>
+      </div>
+
+      <div id="batch-log" class="batch-log"></div>
+    </section>
+  </main>
+
+  <script src="./main.js"></script>
+</body>
+
+</html>
